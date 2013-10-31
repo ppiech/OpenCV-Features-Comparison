@@ -167,6 +167,112 @@ bool performEstimation
     return true;
 }
 
+bool performComparison(const FeatureAlgorithm& alg,
+  const cv::Mat& sourceImage,
+  const cv::Mat& testImage,
+  SingleRunStatistics& stat,
+  std::string& imageName)
+{
+    Keypoints   sourceKp;
+    Descriptors sourceDesc;
+    
+    cv::Mat gray;
+    if (sourceImage.channels() == 3)
+        cv::cvtColor(sourceImage, gray, CV_BGR2GRAY);
+    else if (sourceImage.channels() == 4)
+        cv::cvtColor(sourceImage, gray, CV_BGRA2GRAY);
+    else if(sourceImage.channels() == 1)
+        gray = sourceImage;
+    
+    if (!alg.extractFeatures(gray, sourceKp, sourceDesc))
+        return false;
+    
+    int statIdx = stat.size();
+    stat.resize(statIdx + 1);
+    
+    Keypoints   resKpReal;
+    Descriptors resDesc;
+    Matches     matches;
+    
+    // To convert ticks to milliseconds
+    const double toMsMul = 1000. / cv::getTickFrequency();
+    
+    FrameMatchingStatistics& s = stat[statIdx];
+    
+    cv::Mat transformedImage = testImage;
+            
+    int64 start = cv::getTickCount();
+    
+    alg.extractFeatures(transformedImage, resKpReal, resDesc);
+    
+    // Initialize required fields
+    s.isValid        = resKpReal.size() > 0;
+    s.argumentValue = 0;
+    
+    if (!s.isValid) {
+        return false;
+    }
+    if (alg.knMatchSupported)
+    {
+        std::vector<Matches> knMatches;
+        alg.matchFeatures(sourceDesc, resDesc, 2, knMatches);
+        ratioTest(knMatches, 0.75, matches);
+        
+        // Compute percent of false matches that were rejected by ratio test
+        s.ratioTestFalseLevel = (float)(knMatches.size() - matches.size()) / (float) knMatches.size();
+    }
+    else
+    {
+        alg.matchFeatures(sourceDesc, resDesc, matches);
+    }
+    
+    int64 end = cv::getTickCount();
+    
+    Matches correctMatches;
+    cv::Mat homography;
+    bool homographyFound = ImageTransformation::findHomography(sourceKp, resKpReal, matches, correctMatches, homography);
+    //bool homographyFound = ImageTransformation::findHomographySubPix(sourceKp, gray, resKpReal, transformedImage, matches, correctMatches, homography);
+
+    // Some simple stat:
+    s.isValid        = homographyFound;
+    s.totalKeypoints = resKpReal.size();
+    s.consumedTimeMs = (end - start) * toMsMul;
+    
+    // Compute overall percent of matched keypoints
+    s.percentOfMatches      = (float) matches.size() / (float)(std::min(sourceKp.size(), resKpReal.size()));
+    s.correctMatchesPercent = (float) correctMatches.size() / (float)matches.size();
+    
+    // Compute matching statistics
+	computeMatchesDistanceStatistics(correctMatches, s.meanDistance, s.stdDevDistance);
+	if (homographyFound)
+	{
+		s.reprojectionError = computeReprojectionError(sourceKp, resKpReal, correctMatches, homography);
+	}
+
+	if (1)
+	{
+		cv::Mat matchesImg;
+		cv::drawMatches(transformedImage,
+						resKpReal,
+						gray,
+						sourceKp,
+						correctMatches,
+						matchesImg,
+						cv::Scalar::all(-1),
+						cv::Scalar::all(-1),
+						std::vector<char>(),
+						cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+
+
+
+		std::string matchName = std::string("Matches/");
+		cv::imwrite(matchName + imageName + "_" + alg.name + ".jpg", matchesImg);
+	}
+    
+    return true;
+}
+
+
 cv::Scalar computeReprojectionError(const Keypoints& source, const Keypoints& query, const Matches& matches, const cv::Mat& homography)
 {
     assert(matches.size() > 0);

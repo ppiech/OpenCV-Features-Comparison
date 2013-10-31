@@ -20,58 +20,66 @@ int main(int argc, const char* argv[])
 
     // Initialize list of algorithm tuples:
        
-    algorithms.push_back(FeatureAlgorithm("KAZE",
-        new cv::KAZE(),
-        new cv::FlannBasedMatcher()));
-
-    algorithms.push_back(FeatureAlgorithm("BRISK",
-        new cv::BRISK(60,4),
-        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
-
-    algorithms.push_back(FeatureAlgorithm("ORB",
-        new cv::ORB(),
-        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
+//    algorithms.push_back(FeatureAlgorithm("KAZE",
+//        new cv::KAZE(),
+//        new cv::FlannBasedMatcher()));
+//
+//    algorithms.push_back(FeatureAlgorithm("BRISK",
+//        new cv::BRISK(60,4),
+//        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
+//
+//    algorithms.push_back(FeatureAlgorithm("ORB",
+//        new cv::ORB(),
+//        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
     
-    algorithms.push_back(FeatureAlgorithm("FREAK",
-        new cv::SurfFeatureDetector(),
-        new cv::FREAK(),
-        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
+//    algorithms.push_back(FeatureAlgorithm("FREAK",
+//        new cv::SurfFeatureDetector(),
+//        new cv::FREAK(),
+//        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
 
-    /*
-    algorithms.push_back(FeatureAlgorithm("SURF+BRISK",
-        new cv::SurfFeatureDetector(),
-        new cv::BriskDescriptorExtractor(),
-        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
+    
+    // algorithms.push_back(FeatureAlgorithm("SURF+BRISK",
+    //     new cv::SurfFeatureDetector(),
+    //     new cv::BriskDescriptorExtractor(),
+    //     new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
 
-    algorithms.push_back(FeatureAlgorithm("SURF BF",
+    algorithms.push_back(FeatureAlgorithm("SURF_BF",
         new cv::SurfFeatureDetector(),
         new cv::SurfDescriptorExtractor(),
         new cv::BFMatcher(cv::NORM_L2, useCrossCheck)));
 
-    algorithms.push_back(FeatureAlgorithm("SURF FLANN",
-        new cv::SurfFeatureDetector(),
-        new cv::SurfDescriptorExtractor(),
-        new cv::FlannBasedMatcher()));
-        */
+    FeatureAlgorithm alg =  FeatureAlgorithm("SURF_FLANN_KNN",
+    		        new cv::SurfFeatureDetector(),
+    		        new cv::SurfDescriptorExtractor(),
+    		        new cv::FlannBasedMatcher());
+    alg.knMatchSupported = true;
+    algorithms.push_back(alg);
 
+//    algorithms.push_back(FeatureAlgorithm("ORB_FREAK-normalized",
+//        new cv::OrbFeatureDetector(),
+//        new cv::FREAK(),
+//        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
+//
+//    algorithms.push_back(FeatureAlgorithm("FREAK-normalized",
+//        new cv::SurfFeatureDetector(),
+//        new cv::FREAK(),
+//        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
+//
+//
+//    algorithms.push_back(FeatureAlgorithm("FAST_BRIEF",
+//        new cv::FastFeatureDetector(50),
+//        new cv::BriefDescriptorExtractor(),
+//        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
 
-    /*
-    algorithms.push_back(FeatureAlgorithm("ORB+FREAK(normalized)",
-        new cv::OrbFeatureDetector(),
-        new cv::FREAK(),
-        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
-
-    algorithms.push_back(FeatureAlgorithm("FREAK(normalized)",
-        new cv::SurfFeatureDetector(),
-        new cv::FREAK(),
-        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
-
-
-    algorithms.push_back(FeatureAlgorithm("FAST+BRIEF",
-        new cv::FastFeatureDetector(50),
-        new cv::BriefDescriptorExtractor(),
-        new cv::BFMatcher(cv::NORM_HAMMING, useCrossCheck)));
-
+//    algorithms.push_back(FeatureAlgorithm("SIFT_BF",
+//        new cv::SiftFeatureDetector(),
+//        new cv::SiftDescriptorExtractor(),
+//        new cv::BFMatcher(cv::NORM_L2, useCrossCheck)));
+//
+//    algorithms.push_back(FeatureAlgorithm("SIFT_FLANN",
+//        new cv::SiftFeatureDetector(),
+//        new cv::SiftDescriptorExtractor(),
+//        new cv::FlannBasedMatcher()));
 
 
     
@@ -94,17 +102,19 @@ int main(int argc, const char* argv[])
         transformations.push_back(new BrightnessImageTransform(-127, +127,10));
     }
 
-    if (argc < 2)
+    if (argc < 3)
     {
-        std::cout << "At least one input image should be passed" << std::endl;
+        std::cout << "At least two input image should be passed" << std::endl;
     }
 
-    for (int imageIndex = 1; imageIndex < argc; imageIndex++)
+    std::string refImagePath(argv[1]);
+    cv::Mat refImage = cv::imread(refImagePath);    
+    CollectedStatistics fullStat;
+    for (int imageIndex = 2; imageIndex < argc; imageIndex++)
     {
         std::string testImagePath(argv[imageIndex]);
         cv::Mat testImage = cv::imread(testImagePath);
 
-        CollectedStatistics fullStat;
 
         if (testImage.empty())
         {
@@ -117,39 +127,31 @@ int main(int argc, const char* argv[])
 
             std::cout << "Testing " << alg.name << "...";
 
-            for (size_t transformIndex = 0; transformIndex < transformations.size(); transformIndex++)
-            {
-                const ImageTransformation& trans = *transformations[transformIndex].obj;
-
-                performEstimation(alg, trans, testImage.clone(), fullStat.getStatistics(alg.name, trans.name));
-            }
+            performComparison(alg, testImage.clone(), refImage.clone(), fullStat.getStatistics(alg.name, testImagePath), testImagePath);
 
             std::cout << "done." << std::endl;
         }
-
-        fullStat.printAverage(std::cout, StatisticsElementHomographyError);
-        
-        
-        std::ofstream performanceStr("Performance.txt");
-        fullStat.printPerformanceStatistics(performanceStr);
-
-        std::ofstream matchingRatioStr("MatchingRatio.txt");
-        fullStat.printStatistics(matchingRatioStr,  StatisticsElementMatchingRatio);
-
-        std::ofstream percentOfMatchesStr("PercentOfMatches.txt") ;
-        fullStat.printStatistics(percentOfMatchesStr, StatisticsElementPercentOfMatches);
-
-        std::ofstream percentOfCorrectMatchesStr("PercentOfCorrectMatches.txt");
-        fullStat.printStatistics(percentOfCorrectMatchesStr, StatisticsElementPercentOfCorrectMatches);
-
-        std::ofstream meanDistanceStr("MeanDistance.txt");
-        fullStat.printStatistics(meanDistanceStr, StatisticsElementMeanDistance);
-
-        std::ofstream homographyErrorStr("HomographyError.txt");
-        fullStat.printStatistics(homographyErrorStr, StatisticsElementHomographyError);
-
         /**/
     }
+    fullStat.printAverage(std::cout, StatisticsElementHomographyError);
+
+    std::ofstream performanceStr("Performance.txt");
+    fullStat.printPerformanceStatistics(performanceStr);
+
+    std::ofstream matchingRatioStr("MatchingRatio.txt");
+    fullStat.printStatistics(matchingRatioStr,  StatisticsElementMatchingRatio);
+
+    std::ofstream percentOfMatchesStr("PercentOfMatches.txt") ;
+    fullStat.printStatistics(percentOfMatchesStr, StatisticsElementPercentOfMatches);
+
+    std::ofstream percentOfCorrectMatchesStr("PercentOfCorrectMatches.txt");
+    fullStat.printStatistics(percentOfCorrectMatchesStr, StatisticsElementPercentOfCorrectMatches);
+
+    std::ofstream meanDistanceStr("MeanDistance.txt");
+    fullStat.printStatistics(meanDistanceStr, StatisticsElementMeanDistance);
+
+    std::ofstream homographyErrorStr("HomographyError.txt");
+    fullStat.printStatistics(homographyErrorStr, StatisticsElementHomographyError);
 
     return 0;
 }

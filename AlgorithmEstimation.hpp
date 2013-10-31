@@ -15,5 +15,11 @@ bool performEstimation(const FeatureAlgorithm& alg,
   const cv::Mat& sourceImage,
   SingleRunStatistics& stat);
 
+bool performComparison(const FeatureAlgorithm& alg,
+  const cv::Mat& sourceImage,
+  const cv::Mat& queryImage,
+  SingleRunStatistics& stat, 
+  std::string& imageName);
+
 
 #endif
